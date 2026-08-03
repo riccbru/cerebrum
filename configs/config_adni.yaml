@@ -1,0 +1,16 @@
+experiment_name: "simple3dcnn_adni_baseline"
+
+data:
+  spatial_size: [160, 190, 160]
+  csv_path: "data/adni_nii_clean.csv"
+
+model:
+  num_classes: 3
+  name: "Simple3DCNN"
+
+training:
+  seed: 42
+  epochs: 50
+  batch_size: 4
+  num_workers: 2
+  learning_rate: 0.0001
