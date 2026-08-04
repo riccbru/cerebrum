@@ -16,3 +16,6 @@ checkpoints/
 
 # Misc
 .DS_Store
+
+# Auxiliary
+/slurms/
