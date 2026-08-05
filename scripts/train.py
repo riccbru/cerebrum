@@ -1,23 +1,26 @@
 import os
 import sys
+
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, Subset
 from sklearn.model_selection import GroupShuffleSplit
-import pandas as pd
+from torch.utils.data import DataLoader, Subset
 
-# Aggiunge la radice del repository al path di Python per importare da src/
+# Adds repo root directory and imports src/
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.utils import load_config, set_seed
 from src.dataset import BrainNiiDataset
 from src.models import Simple3DCNN
+from src.utils import load_config, set_seed
+from src.utils.logger import ExperimentLogger
+
 
 def train():
-    print("🚀 Avvio della pipeline di addestramento 3D CNN...")
+    print("Starting training...")
     
-    # 1. Caricamento configurazione YAML e fissaggio dei Seed
+    # 1. Loading YAML conf & setting seeds
     config_path = "configs/config_adni.yaml"
     if not os.path.exists(config_path):
         config_path = "../configs/config_adni.yaml"
@@ -25,11 +28,17 @@ def train():
     config = load_config(config_path)
     set_seed(config["training"]["seed"])
 
-    # Setup del device (GPU / CPU)
+    exp_logger = ExperimentLogger(
+        exp_name=config.get("experiment_name", "3dcnn_adni"),
+        config=config,
+        config_source_path=config_path,
+    )
+
+    # Device setup (GPU / CPU)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using: \033[1m{device}\033[0m")
 
-    # 2. Caricamento Dataset e Split anti-leakage per soggetto (rid)
+    # 2.Dataset loading & anti-leakage split by rid
     csv_path = config["data"]["csv_path"]
     full_dataset = BrainNiiDataset(
         csv_file=csv_path,
@@ -37,14 +46,14 @@ def train():
     )
     df = full_dataset.df
 
-    # Raggruppamento per 'rid' per evitare che lo stesso paziente finisca in Train e Validation
+    # Grouping by 'rid' to avoid same patient is in both Train e Validation sets (data leakage)
     gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=config["training"]["seed"])
     train_idx, val_idx = next(gss.split(df, groups=df['rid']))
 
     train_subset = Subset(full_dataset, train_idx)
     val_subset = Subset(full_dataset, val_idx)
 
-    print(f"📊 Dataset: Totale {len(full_dataset)} | Train Set: {len(train_subset)} | Val Set: {len(val_subset)}")
+    print(f"DATASET:\n\tTOT: {len(full_dataset)}\n\tTRAIN: {len(train_subset)}\n\tVALIDATION: {len(val_subset)}")
 
     train_loader = DataLoader(
         train_subset, 
@@ -59,17 +68,20 @@ def train():
         num_workers=config["training"]["num_workers"]
     )
 
-    # 3. Inizializzazione Modello, Loss e Ottimizzatore
+    # 3. Setup model, loss fun and optimizer
     model = Simple3DCNN(num_classes=config["model"]["num_classes"]).to(device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=float(config["training"]["learning_rate"]))
+    optimizer = optim.Adam(
+        model.parameters(), 
+        lr=float(config["training"]["learning_rate"])
+    )
 
-    # 4. Loop di Addestramento
+    # 4. Training loop
     best_val_loss = float('inf')
     epochs = config["training"]["epochs"]
     logs = []
 
-    print("\n🏋️ Inizio delle epoche di addestramento...")
+    print("\033[1;95m[~]\033[0m Starting training epochs...")
     for epoch in range(1, epochs + 1):
         # --- PHASE: TRAIN ---
         model.train()
@@ -110,31 +122,31 @@ def train():
         epoch_val_loss = val_loss / val_total
         epoch_val_acc = val_correct / val_total
 
-        print(f"Epoch [{epoch:02d}/{epochs:02d}] | "
-              f"Train Loss: {epoch_train_loss:.4f} - Train Acc: {epoch_train_acc:.4f} | "
-              f"Val Loss: {epoch_val_loss:.4f} - Val Acc: {epoch_val_acc:.4f}")
+        print(
+            f"Epoch [{epoch:02d}/{epochs:02d}]\n"
+            f"\tTrain Loss: {epoch_train_loss:.4f}\n"
+            f"\tTrain Acc: {epoch_train_acc:.4f}\n"
+            f"\tVal Loss: {epoch_val_loss:.4f}\n"
+            f"\tVal Acc: {epoch_val_acc:.4f}"
+        )
 
-        logs.append({
-            'epoch': epoch,
-            'train_loss': epoch_train_loss,
-            'train_acc': epoch_train_acc,
-            'val_loss': epoch_val_loss,
-            'val_acc': epoch_val_acc
-        })
+        exp_logger.log_epoch(
+            epoch,
+            epoch_train_loss,
+            epoch_train_acc,
+            epoch_val_loss,
+            epoch_val_acc,
+        )
 
-        # Salva il checkpoint migliore
         if epoch_val_loss < best_val_loss:
             best_val_loss = epoch_val_loss
-            checkpoint_dir = "checkpoints"
-            os.makedirs(checkpoint_dir, exist_ok=True)
-            checkpoint_path = os.path.join(checkpoint_dir, f"{config['experiment_name']}_best.pth")
-            torch.save(model.state_dict(), checkpoint_path)
-            print(f"  💾 Modello migliore salvato in {checkpoint_path}! (Val Loss: {epoch_val_loss:.4f})")
+            exp_logger.save_checkpoint(
+                model, epoch, epoch_val_loss, epoch_val_acc
+            )
 
-    # Salva il file dei log finale
-    os.makedirs("results", exist_ok=True)
-    pd.DataFrame(logs).to_csv(f"results/{config['experiment_name']}_logs.csv", index=False)
-    print(f"\n✅ Addestramento completato! Log salvati in 'results/{config['experiment_name']}_logs.csv'.")
+    print(
+        f"\033[1;92m[*]\033[0m Training complete\nAll artifacts saved under folder: {exp_logger.results_dir}"
+    )
 
 if __name__ == "__main__":
     train()

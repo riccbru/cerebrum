@@ -19,3 +19,8 @@ checkpoints/
 
 # Auxiliary
 /slurms/
+
+# Logs
+*.log
+*.out
+*.err
