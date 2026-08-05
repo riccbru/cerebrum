@@ -13,8 +13,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.dataset import BrainNiiDataset
 from src.models import Simple3DCNN
-from src.utils import load_config, set_seed
-from src.utils.logger import ExperimentLogger
+# from src.utils import load_config, set_seed
+# from src.utils.logger import ExperimentLogger
+from src.utils import load_config, set_seed, ExperimentLogger
 
 
 def train():
