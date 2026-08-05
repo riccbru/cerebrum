@@ -38,7 +38,7 @@ def train():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using: \033[1m{device}\033[0m")
 
-    # 2.Dataset loading & anti-leakage split by rid
+    # 2. Dataset loading & anti-leakage split by rid
     csv_path = config["data"]["csv_path"]
     full_dataset = BrainNiiDataset(
         csv_file=csv_path,
@@ -68,18 +68,30 @@ def train():
         num_workers=config["training"]["num_workers"]
     )
 
-    # 3. Setup model, loss fun and optimizer
+    # 3. Setup model, loss fun with class weights and optimizer with scheduler
     model = Simple3DCNN(num_classes=config["model"]["num_classes"]).to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(
-        model.parameters(), 
-        lr=float(config["training"]["learning_rate"])
+    
+    # --- Weighted CrossEntropy Loss for class imbalance ---
+    train_labels = [full_dataset.df.iloc[i]["label"] for i in train_idx]
+    class_counts = torch.bincount(torch.tensor(train_labels, dtype=torch.long))
+    class_weights = 1.0 / class_counts.float()
+    class_weights = class_weights / class_weights.sum()
+    class_weights = class_weights.to(device)
+
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
+
+    # --- Optimizer & LR Scheduler ---
+    lr = float(config["training"]["learning_rate"])
+    weight_decay = float(config["training"].get("weight_decay", 1e-4))
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=5
     )
 
     # 4. Training loop
     best_val_loss = float('inf')
     epochs = config["training"]["epochs"]
-    logs = []
 
     print("\033[1;95m[~]\033[0m Starting training epochs...")
     for epoch in range(1, epochs + 1):
@@ -121,6 +133,9 @@ def train():
 
         epoch_val_loss = val_loss / val_total
         epoch_val_acc = val_correct / val_total
+
+        # Update Learning Rate Scheduler
+        scheduler.step(epoch_val_loss)
 
         print(
             f"Epoch [{epoch:02d}/{epochs:02d}]\n"
