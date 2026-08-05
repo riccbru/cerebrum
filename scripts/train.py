@@ -29,7 +29,6 @@ def train():
     exp_logger = ExperimentLogger(
         exp_name=config.get("experiment_name", "3dcnn_adni"),
         config=config,
-        config_source_path=config_path,
     )
 
     # Device setup (GPU / CPU)

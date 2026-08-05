@@ -5,7 +5,13 @@ from datetime import datetime
 
 
 class ExperimentLogger:
-    def __init__(self, exp_name="3dcnn_adni", base_checkpoints="checkpoints", base_results="results", config=None):
+    def __init__(
+            self,
+            config=None,
+            exp_name="3dcnn_adni",
+            base_results="results",
+            base_checkpoints="checkpoints"
+        ):
         # 1. Get Job Slurm ID with timestamp
         slurm_job_id = os.environ.get("SLURM_JOB_ID", "local")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
