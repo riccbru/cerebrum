@@ -33,7 +33,7 @@ def train():
 
     # Device setup (GPU / CPU)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using: \033[1m{device}\033[0m")
+    print(f"\033[1m[i]\033[0mDEVICE: \033[90m{device}\033[0m")
 
     # 2. Dataset loading & anti-leakage split by rid
     csv_path = config["data"]["csv_path"]
@@ -50,7 +50,10 @@ def train():
     train_subset = Subset(full_dataset, train_idx)
     val_subset = Subset(full_dataset, val_idx)
 
-    print(f"DATASET:\n\tTOT: {len(full_dataset)}\n\tTRAIN: {len(train_subset)}\n\tVALIDATION: {len(val_subset)}")
+    print("\033[1m[i]\033[0m DATASET:")
+    print(f"  TOT:         {len(full_dataset)}")
+    print(f"  TRAIN:       {len(train_subset)}")
+    print(f"  VALIDATION:  {len(val_subset)}")
 
     train_loader = DataLoader(
         train_subset, 
@@ -69,7 +72,7 @@ def train():
     model = Simple3DCNN(num_classes=config["model"]["num_classes"]).to(device)
     
     # --- Weighted CrossEntropy Loss for class imbalance ---
-    train_labels = [full_dataset.df.iloc[i]["label"] for i in train_idx]
+    train_labels = [full_dataset.df.iloc[i]["diagnosis"] for i in train_idx]
     class_counts = torch.bincount(torch.tensor(train_labels, dtype=torch.long))
     class_weights = 1.0 / class_counts.float()
     class_weights = class_weights / class_weights.sum()
